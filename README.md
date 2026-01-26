@@ -1,32 +1,102 @@
-# Auto-Patch-AI 🤖🛡️
+# Auto-Patch-AI
 
-A CLI tool for DevSecOps that automatically scans your Docker containers and writes security-patched `Dockerfiles` using AI (OpenAI or Local Ollama).
+Scans a Docker image for CVEs using Trivy, then uses GPT-4o-mini to generate a patched Dockerfile. Closes the loop between "found a vulnerability" and "here's how to fix it."
 
-## How it works:
-1. Natively executes `trivy` under the hood to detect CVEs.
-2. Parses the JSON vulnerability report.
-3. Feeds the data to an LLM context window.
-4. Generates a completely secure, upgraded `Dockerfile`.
+The typical DevSecOps workflow is: scanner finds 30 CVEs, developer stares at the report, doesn't know which base image to upgrade to, does nothing. This tool takes the Trivy JSON output, structures it into a prompt, and produces a concrete Dockerfile diff with version pins and `apt-get` upgrades.
 
-## Setup
-1. Verify `trivy` is installed on your system (`brew install trivy`).
-2. Run standard Python setup:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
-3. Export your LLM API Key:
-   ```bash
-   export OPENAI_API_KEY="sk-..."
-   # Or for local Ollama:
-   # export LLM_BASE_URL="http://127.0.0.1:11434/v1"
-   # export LLM_MODEL="llama3"
-   ```
+---
 
-## Usage
-Run the CLI against any public or local image:
-```bash
-python autopatch.py scan python:3.9-slim
+### How it works
+
 ```
-The tool will output `Dockerfile.secure` into your current directory, containing the patched base image and `apt-get` upgrades.
+docker image
+     │
+     ▼
+trivy image --format json
+     │  CVE list + affected packages + fixed versions
+     ▼
+GPT-4o-mini
+     │  "given these vulns in this Dockerfile, produce a patched version"
+     ▼
+Dockerfile.secure
+```
+
+The prompt includes: the full Dockerfile content, each CVE with its severity and fixed version, and an instruction to pin to the minimal safe base image. The model is told to only change what's necessary — it doesn't redesign your Dockerfile.
+
+---
+
+### Requirements
+
+- Python 3.9+
+- [Trivy](https://github.com/aquasecurity/trivy) installed (`brew install trivy` on macOS, `apt install trivy` on Linux)
+- OpenAI API key
+
+---
+
+### Setup
+
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+export OPENAI_API_KEY="sk-..."
+```
+
+---
+
+### Usage
+
+```bash
+# Scan an image and generate a patched Dockerfile
+python autopatch.py --image python:3.9-slim
+
+# Scan against a specific existing Dockerfile
+python autopatch.py --image python:3.9-slim --dockerfile ./Dockerfile
+
+# Write output to a specific path
+python autopatch.py --image nginx:1.21 --output ./Dockerfile.patched
+```
+
+---
+
+### Example output
+
+Input Dockerfile:
+```dockerfile
+FROM python:3.9-slim
+RUN pip install flask==2.0.1
+COPY . /app
+CMD ["python", "app.py"]
+```
+
+After patching (`Dockerfile.secure`):
+```dockerfile
+FROM python:3.11-slim-bookworm
+RUN apt-get update && apt-get upgrade -y && apt-get clean
+RUN pip install flask==3.0.3
+COPY . /app
+CMD ["python", "app.py"]
+```
+
+CVE summary printed to terminal:
+```
+CRITICAL  2    libssl1.1, libc6
+HIGH      7    expat, libxml2, curl ...
+MEDIUM    14
+LOW       31
+──────────────────────────────────
+Patched Dockerfile written to Dockerfile.secure
+```
+
+---
+
+### Notes
+
+- Trivy must be installed separately — `autopatch.py` calls it as a subprocess
+- The patched Dockerfile is a suggestion, not a guarantee — always test it
+- GPT-4o-mini is used for cost efficiency; swap to `gpt-4o` in `autopatch.py` for better results on complex multi-stage builds
+
+---
+
+### License
+
+MIT
