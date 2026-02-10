@@ -1,12 +1,6 @@
 # Auto-Patch-AI
 
-Scans a Docker image for CVEs using Trivy, then uses GPT-4o-mini to generate a patched Dockerfile. Closes the gap between "found a vulnerability" and "here's the fix."
-
-The typical DevSecOps problem: scanner finds 30 CVEs, developer stares at the report, doesn't know which base image to upgrade to, does nothing. This tool takes the Trivy JSON output, structures it into a prompt, and produces a concrete Dockerfile with version pins and `apt-get` upgrades.
-
----
-
-### How it works
+Scans a Docker image for CVEs with Trivy, then uses an LLM to write a patched Dockerfile. Works free out of the box via Groq — no credit card needed.
 
 ```
 docker image
@@ -15,21 +9,11 @@ docker image
 trivy image --format json
      │  CVE list + affected packages + fixed versions
      ▼
-GPT-4o-mini
-     │  "given these vulns, rewrite the Dockerfile securely"
+LLM (Groq / OpenAI / Ollama)
+     │  "rewrite this Dockerfile to fix these CVEs"
      ▼
-Dockerfile.secure  (printed to terminal + saved to disk)
+Dockerfile.secure
 ```
-
----
-
-### Requirements
-
-- Python 3.9+
-- [Trivy](https://github.com/aquasecurity/trivy) installed and in PATH
-  - macOS: `brew install trivy`
-  - Linux: `apt install trivy` or see [trivy install docs](https://github.com/aquasecurity/trivy#installation)
-- OpenAI API key
 
 ---
 
@@ -38,61 +22,78 @@ Dockerfile.secure  (printed to terminal + saved to disk)
 ```bash
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+```
+
+Install Trivy:
+```bash
+brew install trivy          # macOS
+sudo apt install trivy      # Linux
+```
+
+---
+
+### API key (pick one)
+
+**Free — Groq** (recommended): sign up at [console.groq.com](https://console.groq.com) — no card required
+```bash
+export GROQ_API_KEY="your_groq_key"
+```
+
+**Paid — OpenAI:**
+```bash
 export OPENAI_API_KEY="sk-..."
 ```
+
+**Local — Ollama:**
+```bash
+export LLM_BASE_URL="http://localhost:11434/v1"
+export LLM_MODEL="llama3"
+```
+
+Priority order: Groq → Ollama (if `LLM_BASE_URL` set) → OpenAI.
 
 ---
 
 ### Usage
 
 ```bash
-# Scan an image and generate a patched Dockerfile
 python autopatch.py python:3.9-slim
-
-# Any public image works
 python autopatch.py nginx:1.21
 python autopatch.py node:18
 ```
 
-The patched Dockerfile is printed to the terminal and saved as `Dockerfile.secure` in the current directory.
-
-```bash
-# Build and test the patched image
-docker build -f Dockerfile.secure -t myapp:patched .
+Output:
 ```
+Auto-Patch-AI — provider: Groq (free)  model: llama-3.3-70b-versatile
+Scanning image: python:3.9-slim
 
----
+  CRITICAL  2
+  HIGH      7
+  MEDIUM    14
+  LOW       31
 
-### Example output
+Found 54 vulnerabilities. Generating patch...
 
-Input image: `python:3.9-slim`
+╭─────────────── Dockerfile.secure ───────────────╮
+│ FROM python:3.11-slim-bookworm                  │
+│ RUN apt-get update && apt-get upgrade -y && \   │
+│     apt-get clean && rm -rf /var/lib/apt/lists/* │
+│ COPY . /app                                     │
+│ WORKDIR /app                                    │
+│ CMD ["python", "app.py"]                        │
+╰──────────────────────────────────────────────────╯
 
-```
-⚠️  Found 38 vulnerabilities.
-
-╭─────────── Secure Dockerfile ────────────╮
-│ FROM python:3.11-slim-bookworm           │
-│ RUN apt-get update && \                  │
-│     apt-get upgrade -y && \              │
-│     apt-get clean && \                   │
-│     rm -rf /var/lib/apt/lists/*          │
-│ COPY . /app                              │
-│ WORKDIR /app                             │
-│ RUN pip install --upgrade pip            │
-│ CMD ["python", "app.py"]                 │
-╰──────────────────────────────────────────╯
-
-✅ Wrote patched Dockerfile to Dockerfile.secure
+Saved to Dockerfile.secure
+Test it: docker build -f Dockerfile.secure -t myapp:patched .
 ```
 
 ---
 
 ### Notes
 
-- Uses `gpt-4-turbo` by default. Override with `LLM_MODEL=gpt-4o-mini` for lower cost
-- For local Ollama: set `LLM_BASE_URL=http://localhost:11434/v1` and `LLM_MODEL=llama3`
-- Trivy is called as a subprocess — it must be installed separately
-- The patched Dockerfile is a suggestion — always test it before deploying
+- Cap of 20 CVEs sent to the LLM to stay within context limits
+- The patched Dockerfile is a suggestion — test before deploying
+- For `.env` file usage: copy `.env.example` to `.env` and fill in your key
 
 ---
 
