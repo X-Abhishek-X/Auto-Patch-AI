@@ -17,7 +17,7 @@ console = Console()
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
-OPENAI_DEFAULT_MODEL = "gpt-4-turbo"
+OPENAI_DEFAULT_MODEL = "gpt-4o"
 
 def _resolve_client():
     """
