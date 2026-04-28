@@ -21,7 +21,7 @@ OPENAI_DEFAULT_MODEL = "gpt-4o"
 
 def _resolve_client():
     """
-    Priority: Groq > OpenAI > Ollama (via LLM_BASE_URL).
+    Priority: Groq > Custom endpoint (LLM_BASE_URL) > OpenAI.
     Returns (OpenAI client, model_name, provider_label).
     """
     groq_key = os.environ.get("GROQ_API_KEY")
@@ -59,7 +59,7 @@ def _resolve_client():
 
 # ── Trivy ──────────────────────────────────────────────────────────────────────
 
-def run_trivy(image_name: str) -> dict:
+def run_trivy(image_name: str) -> dict | None:
     try:
         result = subprocess.run(
             ["trivy", "image", "--format", "json", image_name],
