@@ -16,7 +16,7 @@ console = Console()
 # Ollama (local):       set LLM_BASE_URL=http://localhost:11434/v1 and LLM_MODEL
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"  # best free-tier model as of 2026
 OPENAI_DEFAULT_MODEL = "gpt-4o"
 
 def _resolve_client():
